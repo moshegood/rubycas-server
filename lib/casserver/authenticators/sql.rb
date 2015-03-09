@@ -64,7 +64,7 @@ class CASServer::Authenticators::SQL < CASServer::Authenticators::Base
       end
     }
 
-    user_model = const_get(user_model_name)
+    user_model = const_get(options[:user_model] || user_model_name)
     # Register new user module, identified by auth_index.
     user_models[auth_index] = user_model
     user_model.establish_connection(options[:database])
@@ -141,7 +141,7 @@ class CASServer::Authenticators::SQL < CASServer::Authenticators::Base
   def extract_extra user
     @extra_attributes = {}
     extra_attributes_to_extract.each do |col|
-      @extra_attributes[col] = user[col.to_sym]
+      @extra_attributes[col] = user.respond_to?(col) ? user.send(col) : nil
     end
   end
 
