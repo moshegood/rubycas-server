@@ -10,7 +10,7 @@ class CASServer::Authenticators::SQLBcrypt < CASServer::Authenticators::SQL
   protected
 
   def matching_users
-    results = user_model.find(:all, :conditions => ["#{username_column} = ?", @username])
+    results = Array(username_column).map{ |col| user_model.find(:all, :conditions => ["#{col} = ?", @username]) }.flatten(1).uniq
     results.select { |user| BCrypt::Password.new(user.send(password_column.to_sym)) == @password }
   end
 

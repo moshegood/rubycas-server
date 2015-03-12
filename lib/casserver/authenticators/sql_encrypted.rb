@@ -52,7 +52,7 @@ class CASServer::Authenticators::SQLEncrypted < CASServer::Authenticators::SQL
     encrypt_function = @options[:encrypt_function] || 'user.encrypted_password == Digest::SHA256.hexdigest("#{user.encryption_salt}::#{@password}")'
 
     log_connection_pool_size
-    results = user_model.find(:all, :conditions => ["#{username_column} = ?", @username])
+    results = Array(username_column).map{ |col| user_model.find(:all, :conditions => ["#{col} = ?", @username]) }.flatten(1).uniq
     user_model.connection_pool.checkin(user_model.connection)
 
     if results.size > 0

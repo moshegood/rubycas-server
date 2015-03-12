@@ -30,7 +30,7 @@ class CASServer::Authenticators::SQLRestAuth < CASServer::Authenticators::SQLEnc
     username_column = @options[:username_column] || "email"
 
     log_connection_pool_size
-    results = user_model.find(:all, :conditions => ["#{username_column} = ?", @username])
+    results = Array(username_column).map{ |col| user_model.find(:all, :conditions => ["#{col} = ?", @username]) }.flatten(1).uniq
     user_model.connection_pool.checkin(user_model.connection)
 
     if results.size > 0
