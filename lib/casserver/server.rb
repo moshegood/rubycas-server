@@ -218,6 +218,15 @@ module CASServer
       set :auth, auth
     end
 
+    def self.init_service_check!
+      if config[:service_check]
+        model = config[:service_check][:class].constantize
+        set :service_check, model.new(config[:service_check])
+      else
+        set :service_check, nil
+      end
+    end
+
     def self.init_logger!
       if config[:log]
         if $LOG && config[:log][:file]
@@ -259,6 +268,7 @@ module CASServer
       init_logger!
       init_database!
       init_authenticators!
+      init_service_check!
     end
 
     before do
@@ -590,9 +600,9 @@ module CASServer
     get "#{uri_path}/validate" do
       CASServer::Utils::log_controller_action(self.class, params)
 
-      if ip_allowed?(request.ip)
+      @service = clean_service_url(params['service'])
+      if ip_allowed?(request.ip) && service_allowed?(@service)
         # required
-        @service = clean_service_url(params['service'])
         @ticket = params['ticket']
         # optional
         @renew = params['renew']
@@ -621,9 +631,9 @@ module CASServer
       # force xml content type
       content_type 'text/xml', :charset => 'utf-8'
 
-      if ip_allowed?(request.ip)
+      @service = clean_service_url(params['service'])
+      if ip_allowed?(request.ip) && service_allowed?(@service)
         # required
-        @service = clean_service_url(params['service'])
         @ticket = params['ticket']
         # optional
         @pgt_url = params['pgtUrl']
@@ -660,10 +670,10 @@ module CASServer
       # force xml content type
       content_type 'text/xml', :charset => 'utf-8'
 
-      if ip_allowed?(request.ip)
+      @service = clean_service_url(params['service'])
+      if ip_allowed?(request.ip) && service_allowed?(@service)
 
         # required
-        @service = clean_service_url(params['service'])
         @ticket = params['ticket']
         # optional
         @pgt_url = params['pgtUrl']
@@ -760,6 +770,11 @@ module CASServer
       allowed_ips = Array(settings.config[:allowed_service_ips])
 
       allowed_ips.empty? || allowed_ips.any? { |i| IPAddr.new(i) === ip }
+    end
+
+    def service_allowed?(service)
+      return true unless settings.service_check
+      settings.service_check.validate(service)
     end
 
     helpers do

@@ -15,4 +15,7 @@ CASServer::Authenticators.autoload :Google, 'casserver/authenticators/google.rb'
 CASServer::Authenticators.autoload :SQLEncrypted, 'casserver/authenticators/sql_encrypted.rb'
 CASServer::Authenticators.autoload :ActiveResource, 'casserver/authenticators/active_resource.rb'
 
+require 'casserver/service_check/base'
+CASServer::ServiceCheck.autoload :SQL, 'casserver/service_check/sql.rb'
+
 require 'casserver/server'

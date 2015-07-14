@@ -405,6 +405,22 @@ database:
 # authenticator and on failure fall through to the second authenticator.
 #
 
+##### SERVICE VALIDATION #######################################################
+# Please note that this section is optional.
+# By default, no service validation occurs.
+#
+# === SQL Service Validation ===================================================
+#service_check:
+#  class: CASServer::ServiceCheck::SQL
+#  database:
+#    adapter: mysql
+#    database: some_db_with_services_listed
+#    username: root
+#    password:
+#    host: localhost
+#    encoding: utf8
+#  service_table: some_table_with_services
+#  service_url_column: the_column_with_urls
 
 ##### LOOK & FEEL ##############################################################
 
