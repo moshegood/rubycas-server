@@ -26,8 +26,8 @@ module CASServer::Model
     end
 
     def matches_service?(service)
-      CASServer::CAS.clean_service_url(self.service) ==
-        CASServer::CAS.clean_service_url(service)
+      CASServer::CAS.clean_service_url(self.service).gsub(/[?].*/,'') ==
+        CASServer::CAS.clean_service_url(service).gsub(/[?].*/,'')
     end
   end
 
