@@ -233,6 +233,7 @@ module CASServer
           print_cli_message "Redirecting RubyCAS-Server log to #{config[:log][:file]}"
           #$LOG.close
           $LOG = Logger.new(config[:log][:file])
+          $LOG.formatter = Logger::Formatter.new
         end
         $LOG.level = Logger.const_get(config[:log][:level]) if config[:log][:level]
       end
@@ -242,6 +243,7 @@ module CASServer
           $LOG.debug "Redirecting ActiveRecord log to #{config[:log][:file]}"
           #$LOG.close
           ActiveRecord::Base.logger = Logger.new(config[:db_log][:file])
+          ActiveRecord::Base.logger.formatter = Logger::Formatter.new
         end
         ActiveRecord::Base.logger.level = Logger.const_get(config[:db_log][:level]) if config[:db_log][:level]
       end
@@ -303,6 +305,7 @@ module CASServer
       @service = clean_service_url(params['service'])
       @renew = params['renew']
       @gateway = params['gateway'] == 'true' || params['gateway'] == '1'
+      @message = session.delete(:message)
 
       if tgc = request.cookies['tgt']
         tgt, tgt_error = validate_ticket_granting_ticket(tgc)
@@ -386,10 +389,12 @@ module CASServer
       end
     end
 
-
     # 2.2
     post "#{uri_path}/login" do
       Utils::log_controller_action(self.class, params)
+
+      # if there is already someone logged in, then log them out
+      perform_full_logout
 
       # 2.2.1 (optional)
       @service = clean_service_url(params['service'])
@@ -425,14 +430,7 @@ module CASServer
       successful_authenticator = nil
       begin
         auth_index = 0
-        settings.auth.each do |auth_class|
-          auth = auth_class.new
-
-          auth_config = settings.config[:authenticator][auth_index]
-          # pass the authenticator index to the configuration hash in case the authenticator needs to know
-          # it splace in the authenticator queue
-          auth.configure(auth_config.merge('auth_index' => auth_index))
-
+        self.authenticators.each do |auth|
           credentials_are_valid = auth.validate(
             :username => @username,
             :password => @password,
@@ -446,8 +444,6 @@ module CASServer
             successful_authenticator = auth
             break
           end
-
-          auth_index += 1
         end
 
         if credentials_are_valid
@@ -521,27 +517,11 @@ module CASServer
 
       if tgt
         CASServer::Model::TicketGrantingTicket.transaction do
-          $LOG.debug("Deleting Service/Proxy Tickets for '#{tgt}' for user '#{tgt.username}'")
-          tgt.granted_service_tickets.each do |st|
-            send_logout_notification_for_service_ticket(st) if config[:enable_single_sign_out]
-            # TODO: Maybe we should do some special handling if send_logout_notification_for_service_ticket fails?
-            #       (the above method returns false if the POST results in a non-200 HTTP response).
-            $LOG.debug "Deleting #{st.class.name.demodulize} #{st.ticket.inspect} for service #{st.service}."
-            st.destroy
-          end
-
-          pgts = CASServer::Model::ProxyGrantingTicket.find(:all,
-            :conditions => [CASServer::Model::ServiceTicket.quoted_table_name+".username = ?", tgt.username],
-            :include => :service_ticket)
-          pgts.each do |pgt|
-            $LOG.debug("Deleting Proxy-Granting Ticket '#{pgt}' for user '#{pgt.service_ticket.username}'")
-            pgt.destroy
-          end
+          logout_and_delete_related_tickets(tgt)
 
           $LOG.debug("Deleting #{tgt.class.name.demodulize} '#{tgt}' for user '#{tgt.username}'")
           tgt.destroy
         end
-
         $LOG.info("User '#{tgt.username}' logged out.")
       else
         $LOG.warn("User tried to log out without a valid ticket-granting ticket.")
@@ -649,6 +629,7 @@ module CASServer
             @pgtiou = pgt.iou if pgt
           end
           @extra_attributes = st.granted_by_tgt.extra_attributes || {}
+          service_response_modifier(@service)
         end
       else
         @success = false
@@ -698,6 +679,7 @@ module CASServer
           end
 
           @extra_attributes = t.granted_by_tgt.extra_attributes || {}
+          service_response_modifier(@service)
         end
       else
         @success = false
@@ -706,7 +688,7 @@ module CASServer
 
       status response_status_from_error(@error) if @error
 
-     render :builder, :proxy_validate
+      render :builder, :proxy_validate
     end
 
 
@@ -730,9 +712,40 @@ module CASServer
       render :builder, :proxy
     end
 
-
-
     # Helpers
+    def perform_full_logout
+      if tgc = request.cookies['tgt']
+        tgt, tgt_error = validate_ticket_granting_ticket(tgc)
+        if tgt and !tgt_error
+          CASServer::Model::TicketGrantingTicket.transaction do
+            logout_and_delete_related_tickets(tgt)
+
+            $LOG.debug("Deleting #{tgt.class.name.demodulize} '#{tgt}' for user '#{tgt.username}'")
+            tgt.destroy
+          end
+        end
+        response.delete_cookie 'tgt'
+      end
+    end
+
+    def logout_and_delete_related_tickets(tgt)
+      $LOG.debug("Deleting Service/Proxy Tickets for '#{tgt}' for user '#{tgt.username}'")
+      tgt.granted_service_tickets.each do |st|
+        send_logout_notification_for_service_ticket(st) if settings.config[:enable_single_sign_out]
+        # TODO: Maybe we should do some special handling if send_logout_notification_for_service_ticket fails?
+        #       (the above method returns false if the POST results in a non-200 HTTP response).
+        $LOG.debug "Deleting #{st.class.name.demodulize} #{st.ticket.inspect} for service #{st.service}."
+        st.destroy
+      end
+
+      pgts = CASServer::Model::ProxyGrantingTicket.find(:all,
+        :conditions => [CASServer::Model::ServiceTicket.quoted_table_name+".username = ?", tgt.username],
+        :include => :service_ticket)
+      pgts.each do |pgt|
+        $LOG.debug("Deleting Proxy-Granting Ticket '#{pgt}' for user '#{pgt.service_ticket.username}'")
+        pgt.destroy
+      end
+    end
 
     def response_status_from_error(error)
       case error.code.to_s
@@ -775,6 +788,25 @@ module CASServer
     def service_allowed?(service)
       return true unless settings.service_check
       settings.service_check.validate(service)
+    end
+
+    def service_response_modifier(service)
+      return true unless settings.service_check
+      @extra_attributes = settings.service_check.modify_response(service, @extra_attributes)
+    end
+
+
+    def authenticators
+      auth_index = 0
+      all_my_auths = []
+      settings.auth.each do |auth_class|
+        auth = auth_class.new
+        auth_config = settings.config[:authenticator][auth_index]
+        auth.configure(auth_config.merge('auth_index' => auth_index))
+        all_my_auths << auth
+        auth_index += 1
+      end
+      all_my_auths
     end
 
     helpers do
