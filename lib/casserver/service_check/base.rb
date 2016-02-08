@@ -7,6 +7,11 @@ module CASServer
       def validate(service)
         true
       end
+
+      def modify_response(service, extra_attributes)
+        extra_attributes
+      end
+
     end
   end
 end
