@@ -38,7 +38,7 @@ module CASServer
       end
 
       def extra_attributes
-        @extra_attributes.stringify_keys
+        deep_stringify_keys(@extra_attributes)
       end
 
       protected
@@ -50,18 +50,30 @@ module CASServer
       end
 
       def extra_attributes_to_extract
+        attrs = []
         if @options[:extra_attributes].kind_of? Array
           attrs = @options[:extra_attributes]
         elsif @options[:extra_attributes].kind_of? String
           attrs = @options[:extra_attributes].split(',').collect{|col| col.strip}
+        elsif @options[:extra_attributes].kind_of? Hash
+          @extra_attributes = @options[:extra_attributes]
         else
           $LOG.error("Can't figure out attribute list from #{@options[:extra_attributes].inspect}. This must be an Array of column names or a comma-separated list.")
-          attrs = []
         end
 
         $LOG.debug("#{self.class.name} will try to extract the following extra_attributes: #{attrs.inspect}")
         return attrs
       end
+
+      def deep_stringify_keys(h)
+        return h unless h.kind_of? Hash
+        n = {}
+        h.each do |k,v|
+          n[k.to_s] = deep_stringify_keys(v)
+        end
+        n
+      end
+
     end
   end
 
