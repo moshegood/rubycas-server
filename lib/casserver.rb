@@ -14,8 +14,11 @@ CASServer::Authenticators.autoload :SQL, 'casserver/authenticators/sql.rb'
 CASServer::Authenticators.autoload :Google, 'casserver/authenticators/google.rb'
 CASServer::Authenticators.autoload :SQLEncrypted, 'casserver/authenticators/sql_encrypted.rb'
 CASServer::Authenticators.autoload :ActiveResource, 'casserver/authenticators/active_resource.rb'
+CASServer::Authenticators.autoload :SQLBcrypt, 'casserver/authenticators/sql_bcrypt.rb'
+CASServer::Authenticators.autoload :SQLRestAuth, 'casserver/authenticators/sql_rest_auth.rb'
 
 require 'casserver/service_check/base'
 CASServer::ServiceCheck.autoload :SQL, 'casserver/service_check/sql.rb'
 
 require 'casserver/server'
+require 'casserver/google_oauth' if CASServer::Server.settings.config[:google_oauth]

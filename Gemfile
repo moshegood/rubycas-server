@@ -1,6 +1,9 @@
 source "http://rubygems.org"
 gemspec
 
+gem 'mysql2'
+gem 'bcrypt'
+gem 'google-api-client', '>= 0.5'
 
 # Gems for authenticators
 group :ldap do

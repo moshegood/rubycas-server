@@ -25,6 +25,10 @@
     </td>
     <td id="login-form-container">
       <%= erb(:_login_form, :layout => false) %>
+      <a id="google-sign-in" class="pull-right"
+        href="<%= escape_html @uri_path %>/oauth2authorize?service=<%= escape_html @service %>">
+        <img src="<%= escape_html @uri_path %>/themes/sign-in-with-google.png">
+      </a>
     </td>
   </tr>
 </table>
